@@ -57,10 +57,7 @@ async function send() {
         'X-User-Id': props.userId,
       },
       body: JSON.stringify({
-        messages: messages.value
-          .filter(m => !m.streaming && m.content)
-          .map(m => ({ role: m.role, content: m.content }))
-          .concat([{ role: 'user', content }]),
+        messages: [{ role: 'user', content }],
         stream: true,
       }),
     })
