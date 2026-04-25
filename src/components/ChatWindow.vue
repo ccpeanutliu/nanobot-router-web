@@ -51,7 +51,7 @@ async function send() {
   await scrollToBottom()
 
   try {
-    const resp = await fetch('/v1/chat/completions/stream', {
+    const resp = await fetch('/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
