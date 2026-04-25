@@ -40,6 +40,14 @@ const draft = ref('')
 const streaming = ref(false)
 const messagesEl = ref(null)
 
+const FETCH_OPTS = () => ({
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    [props.authHeader]: props.authToken,
+  },
+})
+
 async function send() {
   const content = draft.value.trim()
   if (!content || streaming.value) return
@@ -50,31 +58,61 @@ async function send() {
   streaming.value = true
   await scrollToBottom()
 
+  const assistant = messages.value[messages.value.length - 1]
+
   try {
+    // --- streaming attempt ---
     const resp = await fetch('/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        [props.authHeader]: props.authToken,
-      },
-      body: JSON.stringify({
-        messages: [{ role: 'user', content }],
-      }),
+      ...FETCH_OPTS(),
+      body: JSON.stringify({ messages: [{ role: 'user', content }], stream: true }),
     })
 
-    const data = await resp.json()
-
     if (!resp.ok) {
-      throw new Error(data?.error?.message ?? `HTTP ${resp.status}`)
+      const err = await resp.json().catch(() => ({}))
+      throw new Error(err?.error?.message ?? `HTTP ${resp.status}`)
     }
 
-    const assistant = messages.value[messages.value.length - 1]
-    assistant.content = data.choices?.[0]?.message?.content ?? ''
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop()
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const data = line.slice(6).trim()
+        if (data === '[DONE]') break
+        try {
+          const delta = JSON.parse(data).choices?.[0]?.delta?.content ?? ''
+          if (delta) {
+            assistant.content += delta
+            await scrollToBottom()
+          }
+        } catch { /* ignore malformed chunks */ }
+      }
+    }
+
+    // nanobot used tools — stream ended before final response
+    // fall back to non-streaming to get the complete answer
+    if (!assistant.content.trim()) {
+      const r = await fetch('/v1/chat/completions', {
+        ...FETCH_OPTS(),
+        body: JSON.stringify({ messages: [{ role: 'user', content }] }),
+      })
+      const data = await r.json()
+      if (!r.ok) throw new Error(data?.error?.message ?? `HTTP ${r.status}`)
+      assistant.content = data.choices?.[0]?.message?.content ?? ''
+      await scrollToBottom()
+    }
   } catch (e) {
-    const assistant = messages.value[messages.value.length - 1]
     assistant.content = `Error: ${e.message}`
   } finally {
-    const assistant = messages.value[messages.value.length - 1]
     assistant.streaming = false
     streaming.value = false
     await scrollToBottom()
