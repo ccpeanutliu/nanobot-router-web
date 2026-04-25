@@ -3,13 +3,14 @@
     <header>
       <span class="title">nanobot</span>
       <input
-        v-model="userId"
+        v-if="devMode"
+        v-model="authToken"
         class="user-id-input"
         placeholder="User ID"
-        title="Sent as X-User-Id header"
+        title="Sent as X-User-Id header (dev only)"
       />
     </header>
-    <ChatWindow :userId="userId" />
+    <ChatWindow :auth-header="authHeader" :auth-token="authToken" />
   </div>
 </template>
 
@@ -17,7 +18,11 @@
 import { ref } from 'vue'
 import ChatWindow from './components/ChatWindow.vue'
 
-const userId = ref('dev-user')
+const authHeader = import.meta.env.VITE_AUTH_HEADER || 'X-User-Id'
+const devMode = authHeader === 'X-User-Id'
+
+// Dev: editable user ID. Prod: static token from env (SSO sets this at build/runtime).
+const authToken = ref(import.meta.env.VITE_AUTH_TOKEN || 'dev-user')
 </script>
 
 <style>

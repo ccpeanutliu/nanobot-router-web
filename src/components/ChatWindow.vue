@@ -31,7 +31,8 @@
 import { ref, nextTick } from 'vue'
 
 const props = defineProps({
-  userId: { type: String, required: true },
+  authHeader: { type: String, required: true },
+  authToken: { type: String, required: true },
 })
 
 const messages = ref([])
@@ -54,7 +55,7 @@ async function send() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-User-Id': props.userId,
+        [props.authHeader]: props.authToken,
       },
       body: JSON.stringify({
         messages: [{ role: 'user', content }],
