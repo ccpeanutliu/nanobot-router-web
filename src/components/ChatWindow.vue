@@ -59,45 +59,17 @@ async function send() {
       },
       body: JSON.stringify({
         messages: [{ role: 'user', content }],
-        stream: true,
       }),
     })
 
+    const data = await resp.json()
+
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}))
-      throw new Error(err?.error?.message ?? `HTTP ${resp.status}`)
+      throw new Error(data?.error?.message ?? `HTTP ${resp.status}`)
     }
 
-    const reader = resp.body.getReader()
-    const decoder = new TextDecoder()
     const assistant = messages.value[messages.value.length - 1]
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() // keep incomplete last line
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        const data = line.slice(6).trim()
-        if (data === '[DONE]') break
-
-        try {
-          const chunk = JSON.parse(data)
-          const delta = chunk.choices?.[0]?.delta?.content ?? ''
-          if (delta) {
-            assistant.content += delta
-            await scrollToBottom()
-          }
-        } catch {
-          // ignore malformed chunks
-        }
-      }
-    }
+    assistant.content = data.choices?.[0]?.message?.content ?? ''
   } catch (e) {
     const assistant = messages.value[messages.value.length - 1]
     assistant.content = `Error: ${e.message}`
