@@ -8,7 +8,10 @@
       >
         <div class="bubble">
           <span v-if="msg.role === 'user'" class="text">{{ msg.content }}</span>
-          <span v-else class="markdown" v-html="renderMarkdown(msg.content)" />
+          <template v-else>
+            <span v-if="msg.status" class="status">{{ msg.status }}</span>
+            <span v-else class="markdown" v-html="renderMarkdown(msg.content)" />
+          </template>
           <span v-if="msg.streaming" class="cursor" />
         </div>
       </div>
@@ -107,12 +110,15 @@ async function send() {
     // nanobot used tools — stream ended before final response
     // fall back to non-streaming to get the complete answer
     if (!assistant.content.trim()) {
+      assistant.status = '正在執行工具...'
+      await scrollToBottom()
       const r = await fetch('/v1/chat/completions', {
         ...FETCH_OPTS(),
         body: JSON.stringify({ messages: [{ role: 'user', content }] }),
       })
       const data = await r.json()
       if (!r.ok) throw new Error(data?.error?.message ?? `HTTP ${r.status}`)
+      assistant.status = ''
       assistant.content = data.choices?.[0]?.message?.content ?? ''
       await scrollToBottom()
     }
@@ -218,6 +224,12 @@ async function scrollToBottom() {
 .markdown :deep(th),
 .markdown :deep(td) { border: 1px solid #d1d5db; padding: 0.375rem 0.5rem; text-align: left; }
 .markdown :deep(th) { background: #f3f4f6; }
+
+.status {
+  color: #9ca3af;
+  font-style: italic;
+  font-size: 0.875rem;
+}
 
 .cursor {
   display: inline-block;
