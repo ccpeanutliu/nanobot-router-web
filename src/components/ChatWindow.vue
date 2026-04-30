@@ -7,7 +7,8 @@
         :class="['message', msg.role]"
       >
         <div class="bubble">
-          <span class="text">{{ msg.content }}</span>
+          <span v-if="msg.role === 'user'" class="text">{{ msg.content }}</span>
+          <span v-else class="markdown" v-html="renderMarkdown(msg.content)" />
           <span v-if="msg.streaming" class="cursor" />
         </div>
       </div>
@@ -29,6 +30,11 @@
 
 <script setup>
 import { ref, nextTick } from 'vue'
+import { marked } from 'marked'
+
+function renderMarkdown(content) {
+  return marked.parse(content || '')
+}
 
 const props = defineProps({
   authHeader: { type: String, required: true },
@@ -175,6 +181,43 @@ async function scrollToBottom() {
   color: #111;
   border-bottom-left-radius: 0.25rem;
 }
+
+.markdown :deep(p) { margin: 0 0 0.5em; }
+.markdown :deep(p:last-child) { margin-bottom: 0; }
+.markdown :deep(pre) {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  font-size: 0.875rem;
+  margin: 0.5em 0;
+}
+.markdown :deep(code) {
+  font-family: ui-monospace, monospace;
+  font-size: 0.875em;
+}
+.markdown :deep(p > code) {
+  background: #e5e7eb;
+  padding: 0.1em 0.3em;
+  border-radius: 0.25rem;
+}
+.markdown :deep(ul),
+.markdown :deep(ol) { padding-left: 1.25rem; margin: 0.5em 0; }
+.markdown :deep(li) { margin: 0.2em 0; }
+.markdown :deep(h1),
+.markdown :deep(h2),
+.markdown :deep(h3) { margin: 0.75em 0 0.25em; font-weight: 600; }
+.markdown :deep(blockquote) {
+  border-left: 3px solid #d1d5db;
+  margin: 0.5em 0;
+  padding-left: 0.75rem;
+  color: #6b7280;
+}
+.markdown :deep(table) { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
+.markdown :deep(th),
+.markdown :deep(td) { border: 1px solid #d1d5db; padding: 0.375rem 0.5rem; text-align: left; }
+.markdown :deep(th) { background: #f3f4f6; }
 
 .cursor {
   display: inline-block;
