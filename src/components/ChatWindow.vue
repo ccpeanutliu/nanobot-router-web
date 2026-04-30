@@ -1,38 +1,55 @@
 <template>
   <div class="chat-window">
-    <div class="messages" ref="messagesEl">
-      <div
-        v-for="(msg, i) in messages"
-        :key="i"
-        :class="['message', msg.role]"
-      >
-        <div class="bubble">
-          <span v-if="msg.role === 'user'" class="text">{{ msg.content }}</span>
-          <template v-else>
-            <span v-if="msg.status" class="status">{{ msg.status }}</span>
-            <span v-else class="markdown" v-html="renderMarkdown(msg.content)" />
-          </template>
-          <span v-if="msg.streaming" class="cursor" />
+    <aside class="sidebar">
+      <button class="new-chat-btn" @click="newChat">+ New Chat</button>
+      <div class="conv-list">
+        <div
+          v-for="conv in conversations"
+          :key="conv.id"
+          :class="['conv-item', { active: conv.id === activeId }]"
+          @click="switchConv(conv.id)"
+        >
+          <span class="conv-title">{{ conv.title || 'New Chat' }}</span>
+          <button class="conv-delete" @click.stop="deleteConv(conv.id)">×</button>
         </div>
       </div>
-    </div>
+    </aside>
 
-    <form class="input-row" @submit.prevent="send">
-      <input
-        v-model="draft"
-        :disabled="streaming"
-        placeholder="Type a message..."
-        autocomplete="off"
-      />
-      <button type="submit" :disabled="streaming || !draft.trim()">
-        {{ streaming ? '...' : 'Send' }}
-      </button>
-    </form>
+    <div class="chat-area">
+      <div class="messages" ref="messagesEl">
+        <div
+          v-for="(msg, i) in messages"
+          :key="i"
+          :class="['message', msg.role]"
+        >
+          <div class="bubble">
+            <span v-if="msg.role === 'user'" class="text">{{ msg.content }}</span>
+            <template v-else>
+              <span v-if="msg.status" class="status">{{ msg.status }}</span>
+              <span v-else class="markdown" v-html="renderMarkdown(msg.content)" />
+            </template>
+            <span v-if="msg.streaming" class="cursor" />
+          </div>
+        </div>
+      </div>
+
+      <form class="input-row" @submit.prevent="send">
+        <input
+          v-model="draft"
+          :disabled="streaming"
+          placeholder="Type a message..."
+          autocomplete="off"
+        />
+        <button type="submit" :disabled="streaming || !draft.trim()">
+          {{ streaming ? '...' : 'Send' }}
+        </button>
+      </form>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import { marked } from 'marked'
 
 function renderMarkdown(content) {
@@ -42,13 +59,96 @@ function renderMarkdown(content) {
 const props = defineProps({
   authHeader: { type: String, required: true },
   authToken: { type: String, required: true },
+  storageKey: { type: String, required: true },
 })
 
-const messages = ref([])
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2)
+}
+
+function makeConv() {
+  return { id: genId(), title: '', messages: [] }
+}
+
+// --- state ---
+const conversations = ref([makeConv()])
+const activeId = ref(conversations.value[0].id)
 const draft = ref('')
 const streaming = ref(false)
 const messagesEl = ref(null)
 
+const messages = computed(() => {
+  const conv = conversations.value.find(c => c.id === activeId.value)
+  return conv ? conv.messages : []
+})
+
+// --- persistence ---
+const API_HEADERS = () => ({
+  'Content-Type': 'application/json',
+  [props.authHeader]: props.authToken,
+})
+
+onMounted(async () => {
+  try {
+    const resp = await fetch('/conversations', { headers: API_HEADERS() })
+    if (resp.ok) {
+      const data = await resp.json()
+      if (Array.isArray(data) && data.length) {
+        conversations.value = data
+        activeId.value = data[0].id
+      }
+    }
+  } catch { /* ignore */ }
+  nextTick(() => scrollToBottom())
+})
+
+async function save() {
+  // Strip transient streaming state before persisting
+  const convs = conversations.value.map(conv => ({
+    ...conv,
+    messages: conv.messages.map(({ streaming: _s, status: _st, ...rest }) => rest),
+  }))
+  try {
+    await fetch('/conversations', {
+      method: 'PUT',
+      headers: API_HEADERS(),
+      body: JSON.stringify(convs),
+    })
+  } catch { /* ignore */ }
+}
+
+// --- conversation management ---
+function newChat() {
+  const conv = makeConv()
+  conversations.value.unshift(conv)
+  activeId.value = conv.id
+  save()
+}
+
+function switchConv(id) {
+  if (streaming.value) return
+  activeId.value = id
+  nextTick(() => scrollToBottom())
+}
+
+function deleteConv(id) {
+  if (conversations.value.length === 1) {
+    // Reset to empty rather than deleting the last one
+    const conv = conversations.value[0]
+    conv.title = ''
+    conv.messages = []
+    save()
+    return
+  }
+  const idx = conversations.value.findIndex(c => c.id === id)
+  conversations.value.splice(idx, 1)
+  if (activeId.value === id) {
+    activeId.value = conversations.value[Math.min(idx, conversations.value.length - 1)].id
+  }
+  save()
+}
+
+// --- chat ---
 const FETCH_OPTS = () => ({
   method: 'POST',
   headers: {
@@ -63,6 +163,13 @@ async function send() {
 
   draft.value = ''
   messages.value.push({ role: 'user', content })
+
+  // Set title from first user message
+  const conv = conversations.value.find(c => c.id === activeId.value)
+  if (conv && !conv.title) {
+    conv.title = content.slice(0, 30) + (content.length > 30 ? '…' : '')
+  }
+
   messages.value.push({ role: 'assistant', content: '', streaming: true })
   streaming.value = true
   await scrollToBottom()
@@ -70,7 +177,6 @@ async function send() {
   const assistant = messages.value[messages.value.length - 1]
 
   try {
-    // --- streaming attempt ---
     const resp = await fetch('/v1/chat/completions', {
       ...FETCH_OPTS(),
       body: JSON.stringify({ messages: [{ role: 'user', content }], stream: true }),
@@ -108,7 +214,6 @@ async function send() {
     }
 
     // nanobot used tools — stream ended before final response
-    // fall back to non-streaming to get the complete answer
     if (!assistant.content.trim()) {
       assistant.status = '正在執行工具...'
       await scrollToBottom()
@@ -127,6 +232,7 @@ async function send() {
   } finally {
     assistant.streaming = false
     streaming.value = false
+    save()
     await scrollToBottom()
   }
 }
@@ -142,8 +248,99 @@ async function scrollToBottom() {
 <style scoped>
 .chat-window {
   display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---- Sidebar ---- */
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
   flex-direction: column;
-  height: 100%;
+  border-right: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.new-chat-btn {
+  margin: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.new-chat-btn:hover {
+  background: #1d4ed8;
+}
+
+.conv-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0.5rem 0.5rem;
+}
+
+.conv-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.5rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: #374151;
+  transition: background 0.1s;
+}
+
+.conv-item:hover {
+  background: #e5e7eb;
+}
+
+.conv-item.active {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.conv-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conv-delete {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.1rem;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+}
+
+.conv-item:hover .conv-delete {
+  opacity: 1;
+}
+
+.conv-delete:hover {
+  color: #ef4444;
+}
+
+/* ---- Chat area ---- */
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .messages {
