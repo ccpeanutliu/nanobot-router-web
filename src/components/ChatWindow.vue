@@ -179,7 +179,7 @@ async function send() {
   try {
     const resp = await fetch('/v1/chat/completions', {
       ...FETCH_OPTS(),
-      body: JSON.stringify({ messages: [{ role: 'user', content }], stream: true }),
+      body: JSON.stringify({ messages: [{ role: 'user', content }], stream: true, session_id: activeId.value }),
     })
 
     if (!resp.ok) {
@@ -219,7 +219,7 @@ async function send() {
       await scrollToBottom()
       const r = await fetch('/v1/chat/completions', {
         ...FETCH_OPTS(),
-        body: JSON.stringify({ messages: [{ role: 'user', content }] }),
+        body: JSON.stringify({ messages: [{ role: 'user', content }], session_id: activeId.value }),
       })
       const data = await r.json()
       if (!r.ok) throw new Error(data?.error?.message ?? `HTTP ${r.status}`)
@@ -252,59 +252,65 @@ async function scrollToBottom() {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  background: var(--bg);
+  transition: background 0.2s;
 }
 
 /* ---- Sidebar ---- */
 .sidebar {
-  width: 220px;
+  width: 240px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #e5e7eb;
-  background: #f9fafb;
+  border-right: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  transition: background 0.2s, border-color 0.2s;
 }
 
 .new-chat-btn {
-  margin: 0.75rem;
+  margin: 0.625rem;
   padding: 0.5rem 0.75rem;
-  background: #2563eb;
+  background: var(--accent);
   color: #fff;
   border: none;
   border-radius: 0.5rem;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
   cursor: pointer;
   transition: background 0.15s;
+  text-align: left;
 }
 
 .new-chat-btn:hover {
-  background: #1d4ed8;
+  background: var(--accent-hover);
 }
 
 .conv-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 0.5rem 0.5rem;
+  padding: 0 0.375rem 0.5rem;
 }
 
 .conv-item {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.5rem 0.5rem;
+  padding: 0.5rem 0.625rem;
   border-radius: 0.4rem;
   cursor: pointer;
-  font-size: 0.875rem;
-  color: #374151;
-  transition: background 0.1s;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  transition: background 0.1s, color 0.1s;
 }
 
 .conv-item:hover {
-  background: #e5e7eb;
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .conv-item.active {
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: var(--bg-active);
+  color: var(--text-active);
 }
 
 .conv-title {
@@ -318,7 +324,7 @@ async function scrollToBottom() {
   flex-shrink: 0;
   background: none;
   border: none;
-  color: #9ca3af;
+  color: var(--text-muted);
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
@@ -341,15 +347,16 @@ async function scrollToBottom() {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  background: var(--bg);
 }
 
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: 1.5rem 2rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .message {
@@ -365,44 +372,46 @@ async function scrollToBottom() {
 }
 
 .bubble {
-  max-width: 70%;
-  padding: 0.75rem 1rem;
+  max-width: 72%;
+  padding: 0.625rem 0.875rem;
   border-radius: 1rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
+  line-height: 1.6;
   word-break: break-word;
+  font-size: 0.9375rem;
 }
 
 .message.user .bubble {
-  background: #2563eb;
-  color: #fff;
+  background: var(--bubble-user-bg);
+  color: var(--bubble-user-text);
   border-bottom-right-radius: 0.25rem;
+  white-space: pre-wrap;
 }
 
 .message.assistant .bubble {
-  background: #f3f4f6;
-  color: #111;
+  background: var(--bubble-assistant-bg);
+  color: var(--bubble-assistant-text);
   border-bottom-left-radius: 0.25rem;
+  transition: background 0.2s;
 }
 
 .markdown :deep(p) { margin: 0 0 0.5em; }
 .markdown :deep(p:last-child) { margin-bottom: 0; }
 .markdown :deep(pre) {
-  background: #1e1e1e;
-  color: #d4d4d4;
+  background: var(--code-bg);
+  color: var(--code-text);
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
   overflow-x: auto;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   margin: 0.5em 0;
 }
 .markdown :deep(code) {
-  font-family: ui-monospace, monospace;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
   font-size: 0.875em;
 }
 .markdown :deep(p > code) {
-  background: #e5e7eb;
-  padding: 0.1em 0.3em;
+  background: var(--inline-code-bg);
+  padding: 0.1em 0.35em;
   border-radius: 0.25rem;
 }
 .markdown :deep(ul),
@@ -412,18 +421,18 @@ async function scrollToBottom() {
 .markdown :deep(h2),
 .markdown :deep(h3) { margin: 0.75em 0 0.25em; font-weight: 600; }
 .markdown :deep(blockquote) {
-  border-left: 3px solid #d1d5db;
+  border-left: 3px solid var(--border);
   margin: 0.5em 0;
   padding-left: 0.75rem;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 .markdown :deep(table) { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
 .markdown :deep(th),
-.markdown :deep(td) { border: 1px solid #d1d5db; padding: 0.375rem 0.5rem; text-align: left; }
-.markdown :deep(th) { background: #f3f4f6; }
+.markdown :deep(td) { border: 1px solid var(--border); padding: 0.375rem 0.5rem; text-align: left; }
+.markdown :deep(th) { background: var(--bg-hover); }
 
 .status {
-  color: #9ca3af;
+  color: var(--text-muted);
   font-style: italic;
   font-size: 0.875rem;
 }
@@ -445,41 +454,50 @@ async function scrollToBottom() {
 .input-row {
   display: flex;
   gap: 0.5rem;
-  padding: 1rem 1.5rem;
-  border-top: 1px solid #e5e7eb;
+  padding: 0.875rem 1.5rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  transition: border-color 0.2s, background 0.2s;
 }
 
 .input-row input {
   flex: 1;
   padding: 0.625rem 0.875rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.5rem;
-  font-size: 1rem;
+  border: 1px solid var(--input-border);
+  border-radius: 0.625rem;
+  font-size: 0.9375rem;
   outline: none;
-  transition: border-color 0.15s;
+  background: var(--bg-input);
+  color: var(--text);
+  transition: border-color 0.15s, background 0.2s;
+}
+
+.input-row input::placeholder {
+  color: var(--text-muted);
 }
 
 .input-row input:focus {
-  border-color: #2563eb;
+  border-color: var(--accent);
 }
 
 .input-row button {
-  padding: 0.625rem 1.25rem;
-  background: #2563eb;
+  padding: 0.625rem 1.125rem;
+  background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 0.5rem;
-  font-size: 1rem;
+  border-radius: 0.625rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .input-row button:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: var(--accent-hover);
 }
 
 .input-row button:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 </style>
